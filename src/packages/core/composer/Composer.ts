@@ -83,6 +83,33 @@ export class Composer<T extends RegisterObject<any> = {}>
     }
 
     /**
+     * Registers all dependencies from another composer and returns a new
+     * composer; neither composer is modified.
+     *
+     * The module's keys and provider types are preserved in the returned
+     * composer. If both composers contain the same key, the module's
+     * registration replaces the existing registration at runtime.
+     *
+     * @typeParam U The registry shape of the composer being registered.
+     * @param composer Composer containing the registrations to merge.
+     * @returns A new composer whose registry contains this composer and the
+     * module's registrations.
+     */
+    public registerModule<const U extends RegisterObject>(
+        composer: Composer<U>
+    ): Composer<T & U>
+    {
+        const registration = composer._registerObject;
+
+        const registerObject = {
+            ...this._registerObject,
+            ...registration
+        } as T & U;
+
+        return new Composer(registerObject);        
+    }
+
+    /**
      * Composes the registry into a container.
      *
      * Providers are resolved lazily when their corresponding container
