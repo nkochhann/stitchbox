@@ -104,6 +104,84 @@ suite('Builder and composition', () => {
         });
     })
 
+    suite('Composer.registerModule()', () => {
+
+        test('Merge registrations from another composer into a new composer.', () => {
+            const configFactory = () => ({ host: 'localhost', port: 1234 });
+            const dbFactory = ({ config }: any) => new DB(config.host, config.port);
+
+            const moduleComposer = Composer.create()
+                .register({ db: dbFactory });
+
+            const composer = Composer.create()
+                .register({ config: configFactory })
+                .registerModule(moduleComposer);
+
+            const container = composer.compose();
+
+            assert(container.db instanceof DB);
+            assert.strictEqual(container.db.getHost(), 'localhost');
+        });
+
+        test('Verify registerModule returns a new composer and keeps previous composers immutable.', () => {
+            const configFactory = () => ({ host: 'localhost', port: 1234 });
+            const dbFactory = ({ config }: any) => new DB(config.host, config.port);
+
+            const baseComposer = Composer.create().register({ config: configFactory });
+            const moduleComposer = Composer.create().register({ db: dbFactory });
+
+            const mergedComposer = baseComposer.registerModule(moduleComposer);
+
+            assert.notStrictEqual(baseComposer, mergedComposer);
+            assert.deepStrictEqual({ ...baseComposer }, { _registerObject: { config: configFactory } });
+            assert.deepStrictEqual({ ...moduleComposer }, { _registerObject: { db: dbFactory } });
+            assert.deepStrictEqual(
+                { ...mergedComposer },
+                { _registerObject: { config: configFactory, db: dbFactory } }
+            );
+        });
+
+        test('Verify registerModule snapshots module registrations at call time.', () => {
+            const configFactory = () => ({ host: 'localhost', port: 1234 });
+            const dbFactory = ({ config }: any) => new DB(config.host, config.port);
+            const loggerFactory = () => ({ log: (message: string) => message });
+
+            const baseComposer = Composer.create().register({ config: configFactory });
+            const moduleComposer = Composer.create().register({ db: dbFactory });
+
+            const mergedComposer = baseComposer.registerModule(moduleComposer);
+            const evolvedModuleComposer = moduleComposer.register({ logger: loggerFactory });
+
+            const mergedContainer = mergedComposer.compose();
+            const evolvedModuleContainer = evolvedModuleComposer.compose();
+
+            assert(mergedContainer.db instanceof DB);
+            // @ts-expect-error -- logger was registered after registerModule snapshot
+            assert.strictEqual(mergedContainer.logger, undefined);
+            assert.strictEqual(typeof evolvedModuleContainer.logger.log, 'function');
+        });
+
+        test('Verify registerModule still composes lazily; factories are not called until read.', (t) => {
+            const configFactory = t.mock.fn(() => ({ host: 'localhost', port: 1234 }));
+            const dbFactory = t.mock.fn(({ config }: any) => new DB(config.host, config.port));
+
+            const moduleComposer = Composer.create().register({ db: dbFactory });
+            const container = Composer.create()
+                .register({ config: configFactory })
+                .registerModule(moduleComposer)
+                .compose();
+
+            assert.strictEqual(configFactory.mock.calls.length, 0);
+            assert.strictEqual(dbFactory.mock.calls.length, 0);
+
+            const db = container.db;
+
+            assert(db instanceof DB);
+            assert.strictEqual(configFactory.mock.calls.length, 1);
+            assert.strictEqual(dbFactory.mock.calls.length, 1);
+        });
+    })
+
     suite('Composer.compose()', () => {
 
         test('Compose an empty composer successfully.', () => {

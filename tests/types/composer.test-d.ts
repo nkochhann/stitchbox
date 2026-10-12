@@ -96,3 +96,58 @@ const t11 = Composer.create()
     .register({ a: () => "now a string" })
     .compose();
 expectTypeOf(t11).toHaveProperty("a").toEqualTypeOf<string>();
+
+// T12. registerModule() and compose() expose typed keys from both composers
+const userModule = Composer.create()
+    .register({ userConfig: () => ({ name: "stitchbox" }) });
+const runtimeModule = Composer.create()
+    .register({ runtime: () => ({ region: "sa-east" }) });
+
+const t12 = Composer.create()
+    .registerModule(userModule)
+    .registerModule(runtimeModule)
+    .compose();
+
+expectTypeOf(t12).toHaveProperty("userConfig").toEqualTypeOf<{ name: string }>();
+expectTypeOf(t12).toHaveProperty("runtime").toEqualTypeOf<{ region: string }>();
+expectTypeOf<keyof typeof t12>().toEqualTypeOf<"userConfig" | "runtime">();
+
+// T13. registerModule() allows later base registrations to consume module keys
+Composer.create()
+    .registerModule(Composer.create().register({ token: () => "abc" }))
+    .register({ client: ({ token }) => token.length });
+
+// T14. factories cannot read module keys before registerModule()
+// @ts-expect-error -- `token` is provided by a later registerModule() call
+Composer.create().register({ client: ({ token }) => token.length }).registerModule(
+    Composer.create().register({ token: () => "abc" })
+);
+
+// T15. hidden keys from modules are injectable but omitted from composed type
+const hiddenModule = Composer.create()
+    .register({ secret: { factory: () => "s3cr3t", hidden: true } });
+
+const t15 = Composer.create()
+    .registerModule(hiddenModule)
+    .register({ exposed: ({ secret }) => secret.length })
+    .compose();
+
+expectTypeOf(t15).toHaveProperty("exposed").toEqualTypeOf<number>();
+// @ts-expect-error -- hidden
+t15.secret;
+
+// T16. duplicate keys across base and module resolve to the module type
+const t16 = Composer.create()
+    .register({ setting: () => 123 })
+    .registerModule(Composer.create().register({ setting: () => "module" }))
+    .compose();
+
+expectTypeOf(t16).toHaveProperty("setting").toEqualTypeOf<string>();
+
+// T17. chaining registerModule() with duplicate keys uses the rightmost module type
+const t17 = Composer.create()
+    .registerModule(Composer.create().register({ shared: () => 1 }))
+    .registerModule(Composer.create().register({ shared: () => true }))
+    .compose();
+
+expectTypeOf(t17).toHaveProperty("shared").toEqualTypeOf<boolean>();
