@@ -127,4 +127,43 @@ suite('Integration graph', () => {
         // registry key/path; the original error propagates unchanged.
         assert.throws(() => container.repository, /DB connection failed/);
     });
+
+    test('Compose centrally from project modules registered through registerModule.', (t) => {
+        const infraConfigFactory = t.mock.fn(() => ({ host: 'localhost', port: 1234 }));
+        const loggerFactory = t.mock.fn(() => new Logger());
+        const dbFactory = t.mock.fn(({ config }) => new DB(config.host, config.port));
+        const repositoryFactory = t.mock.fn(({ db, logger }) => new Repository(db, logger));
+        const serviceFactory = t.mock.fn(({ repository, logger }) => new Service(repository, logger));
+
+        const infraModule = Composer.create()
+            .register({ config: { factory: infraConfigFactory, hidden: true } })
+            .register({ logger: { factory: loggerFactory, singleton: true } });
+
+        const persistenceModule = Composer.create()
+            .register({ db: dbFactory })
+            .register({ repository: repositoryFactory });
+
+        const serviceModule = Composer.create()
+            .register({ service: serviceFactory });
+
+        const container = Composer.create()
+            .registerModule(infraModule)
+            .registerModule(persistenceModule)
+            .registerModule(serviceModule)
+            .compose();
+
+        assert.strictEqual(infraConfigFactory.mock.calls.length, 0);
+        assert.strictEqual(loggerFactory.mock.calls.length, 0);
+        assert.strictEqual(dbFactory.mock.calls.length, 0);
+        assert.strictEqual(repositoryFactory.mock.calls.length, 0);
+        assert.strictEqual(serviceFactory.mock.calls.length, 0);
+
+        assert.strictEqual(container.service.describe(), '[log] host=localhost');
+
+        assert.strictEqual(infraConfigFactory.mock.calls.length, 1);
+        assert.strictEqual(loggerFactory.mock.calls.length, 1);
+        assert.strictEqual(dbFactory.mock.calls.length, 1);
+        assert.strictEqual(repositoryFactory.mock.calls.length, 1);
+        assert.strictEqual(serviceFactory.mock.calls.length, 1);
+    });
 });
