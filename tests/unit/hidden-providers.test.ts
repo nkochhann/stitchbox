@@ -64,4 +64,32 @@ suite('Hidden providers', () => {
         assert('config' in container);
         assert.deepStrictEqual(container.config, { apiKey: 'secret' });
     });
+
+    test('A hidden provider from a registered module is injectable into later base registrations.', () => {
+        const infraModule = Composer.create()
+            .register({ config: { factory: () => ({ apiKey: 'secret' }), hidden: true } });
+
+        const container = Composer.create()
+            .registerModule(infraModule)
+            .register({ client: ({ config }) => new ApiClient(config.apiKey) })
+            .compose();
+
+        assert(container.client instanceof ApiClient);
+        assert.strictEqual(container.client.getApiKey(), 'secret');
+    });
+
+    test('A hidden provider from a registered module remains hidden from the composed public type.', () => {
+        const infraModule = Composer.create()
+            .register({ config: { factory: () => ({ apiKey: 'secret' }), hidden: true } });
+
+        const container = Composer.create()
+            .registerModule(infraModule)
+            .register({ client: ({ config }) => new ApiClient(config.apiKey) })
+            .compose();
+
+        assert(container.client instanceof ApiClient);
+
+        // @ts-expect-error -- `config` remains hidden after module merge
+        assert.deepStrictEqual(container.config, { apiKey: 'secret' });
+    });
 });

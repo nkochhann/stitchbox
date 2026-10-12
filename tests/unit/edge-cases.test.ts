@@ -34,6 +34,46 @@ suite('Edge cases', () => {
         assert.strictEqual(container.db.getHost(), 'second-host');
     });
 
+    test('Current behavior: duplicate keys across base and module registrations, module wins.', () => {
+        const moduleComposer = Composer.create()
+            .register({ db: () => new DB('module-host', 2222) });
+
+        const container = Composer.create()
+            .register({ db: () => new DB('base-host', 1111) })
+            .registerModule(moduleComposer)
+            .compose();
+
+        assert.strictEqual(container.db.getHost(), 'module-host');
+    });
+
+    test('Current behavior: when chaining registerModule calls with duplicate keys, rightmost module wins.', () => {
+        const moduleA = Composer.create()
+            .register({ db: () => new DB('module-a-host', 1111) });
+        const moduleB = Composer.create()
+            .register({ db: () => new DB('module-b-host', 2222) });
+
+        const container = Composer.create()
+            .registerModule(moduleA)
+            .registerModule(moduleB)
+            .compose();
+
+        assert.strictEqual(container.db.getHost(), 'module-b-host');
+    });
+
+    test('Current behavior: registering an empty module does not change the base composer outcome.', () => {
+        const baseContainer = Composer.create()
+            .register({ db: () => new DB('base-host', 1111) })
+            .compose();
+
+        const moduleContainer = Composer.create()
+            .register({ db: () => new DB('base-host', 1111) })
+            .registerModule(Composer.create())
+            .compose();
+
+        assert.strictEqual(baseContainer.db.getHost(), 'base-host');
+        assert.strictEqual(moduleContainer.db.getHost(), 'base-host');
+    });
+
     test('Current behavior: a registered key named "toString" resolves the registered factory, not the inherited method.', () => {
         const container = Composer.create()
             // @ts-ignore -- registering a key that collides with an inherited Object member
@@ -85,6 +125,16 @@ suite('Edge cases', () => {
         const composer = Composer.create()
             // @ts-ignore -- intentionally registering a malformed entry (not a factory or provider config)
             .register({ db: 'not-a-factory' });
+
+        assert.throws(() => composer.compose(), TypeError);
+    });
+
+    test('Current behavior: invalid module entries are not validated at registerModule() time, and fail at compose() call.', () => {
+        const invalidModule = Composer.create()
+            // @ts-ignore -- intentionally registering a malformed entry (not a factory or provider config)
+            .register({ db: 'not-a-factory' });
+
+        const composer = Composer.create().registerModule(invalidModule);
 
         assert.throws(() => composer.compose(), TypeError);
     });

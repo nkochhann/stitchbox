@@ -87,4 +87,25 @@ suite('Provider configuration', () => {
         assert.strictEqual(factory.mock.calls.length, 2);
         assert('db' in container);
     });
+
+    test('A singleton provider from a registered module remains singleton in the final container.', (t) => {
+        const factory = t.mock.fn(() => new DB('localhost', 1234));
+
+        const persistenceModule = Composer.create()
+            .register({ db: { factory, singleton: true } });
+
+        const container = Composer.create()
+            .registerModule(persistenceModule)
+            .register({ serviceA: ({ db }) => db })
+            .register({ serviceB: ({ db }) => db })
+            .compose();
+
+        const fromA = container.serviceA;
+        const fromB = container.serviceB;
+        const direct = container.db;
+
+        assert.strictEqual(fromA, fromB);
+        assert.strictEqual(fromA, direct);
+        assert.strictEqual(factory.mock.calls.length, 1);
+    });
 });
