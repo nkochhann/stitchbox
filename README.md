@@ -143,19 +143,46 @@ const container = Composer.create()
 container.greet("Ana");
 ```
 
-### Splitting registrations across modules
+### Project modules, central composition
 
-A `Composer` is a plain immutable value, so each module can extend one and hand it on.
+Each project area can define and export its own `Composer`. Register those modules
+at the application composition root, then call `compose()` once to create the
+container.
 
 ```ts
 // infra.ts
-export const infra = Composer.create().register({ db: () => new DB() });
+export const infra = Composer.create()
+    .register({ config: () => loadConfig() })
+    .register({ db: ({ config }) => new DB(config.dbUrl) });
 
-// domain.ts
-export const domain = infra.register({ users: ({ db }) => new UserRepository(db) });
+// observability.ts
+export const observability = Composer.create()
+    .register({ logger: { factory: () => new Logger(), singleton: true } });
 
 // main.ts
-const container = domain.compose();
+const container = Composer.create()
+    .registerModule(infra)
+    .registerModule(observability)
+    .compose();
+
+container.db;     // DB
+container.logger; // Logger
+```
+
+Composers are immutable, so each module can be defined independently and reused.
+If modules contain the same key, the later module registration wins at runtime.
+
+Factories are typed when their module is built. Registering modules centrally
+does not retroactively make one module's dependencies available to another
+module's factory type. Keep cross-module-dependent registrations in a shared
+`register()` chain, or add them at the composition root after registering the
+module that provides their dependencies:
+
+```ts
+const container = Composer.create()
+    .registerModule(infra)
+    .register({ users: ({ db }) => new UserRepository(db) })
+    .compose();
 ```
 
 ## Behavior and limits
