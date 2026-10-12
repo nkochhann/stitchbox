@@ -1,6 +1,6 @@
 {
   "name": "stitchbox",
-  "version": "0.0.3",
+  "version": "0.0.4",
   "description": "Simple, type-safe app composition for TypeScript.",
   "keywords": [
     "compose",
